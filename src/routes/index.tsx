@@ -2,11 +2,12 @@ import { _Object } from "@aws-sdk/client-s3";
 import { Title } from "@solidjs/meta";
 import { createQuery } from "@tanstack/solid-query";
 import { For, Show, createEffect, createSignal } from "solid-js";
+import { Button } from "~/components/ui/button";
 import { api } from "~/lib/api";
 
 const MAX_FILES_LIMIT = 10;
 const FETCH_WHEN_LESSTHAN = 2;
-const CDN_URL = process.env.VITE_S3_IMAGE_PROXY_URL ?? "";
+const CDN_URL = import.meta.env.VITE_S3_IMAGE_PROXY_URL ?? "";
 
 export default function Home() {
     const [startAfter, setStartAfter] = createSignal("");
@@ -38,7 +39,7 @@ export default function Home() {
 
     return (
         <main>
-            <Title>Hello World</Title>
+            <Title>eyes 👀</Title>
 
             <div class={"flex flex-wrap"}>
                 <Show when={hello.data}>
@@ -56,10 +57,7 @@ export default function Home() {
                     )}
                 </Show>
             </div>
-            <button onClick={() => setCurrentImageIdx((prev) => prev + 1)}>Next</button>
-            <pre>
-                <code>{JSON.stringify(hello.data, null, 2)}</code>
-            </pre>
+            <Button onClick={() => setCurrentImageIdx((prev) => prev + 1)}>Next</Button>
         </main>
     );
 }

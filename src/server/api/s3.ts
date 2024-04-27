@@ -12,6 +12,10 @@ const client = new S3Client({
 const MAX_LIMIT = 1000;
 
 export const listFiles = async ({ limit, startAfter }: { limit: number; startAfter: string }) => {
+    console.log({
+        bucket: process.env.S3_BUCKET,
+        prefix: process.env.S3_PATH_PREFIX,
+    });
     const command = new ListObjectsV2Command({
         Bucket: process.env.S3_BUCKET ?? "",
         Prefix: process.env.S3_PATH_PREFIX ?? "",
