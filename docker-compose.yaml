@@ -1,0 +1,9 @@
+version: "3"
+services:
+  akira:
+    build: .
+    container_name: akira
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./.env
