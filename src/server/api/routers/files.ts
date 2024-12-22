@@ -1,121 +1,140 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "../utils";
 import { listFiles } from "~/server/api/s3";
+import { type File } from "@prisma/client";
+import { db as dbqb, query } from "~/server/api/kysely";
+import { sql } from "kysely";
 import { db } from "~/lib/db";
-import { Prisma, type File } from "@prisma/client";
 
 export const filesRouter = createTRPCRouter({
-    homeList: publicProcedure
-        .input(z.object({ limit: z.number().int().positive(), tags: z.string().array() }))
-        .query(async ({ input }) => {
-            let files: File[] = [];
-            if (input.tags.length === 0) {
-                files = await db.$queryRaw<File[]>`SELECT *
-                            FROM File
-                            ORDER BY RAND(1234);
-                        `;
-            } else {
-                files = await db.$queryRaw<File[]>(Prisma.sql`SELECT *
-                            FROM File
-                            WHERE EXISTS (
-                                SELECT 1
-                                FROM \`_FileToTag\`
-                                INNER JOIN \`Tag\` ON \`_FileToTag\`.\`B\` = \`Tag\`.\`name\`
-                                WHERE \`_FileToTag\`.\`A\` = File.id
-                                  -- TODO FIX THIS LOL
-                                AND \`Tag\`.\`name\` IN (${Prisma.join(input.tags)})
-                            )
-                            ORDER BY RAND(1234);
-                        `);
-            }
+  homeList: publicProcedure
+    .input(
+      z.object({
+        limit: z.number().int().positive(),
+        tags: z.string().array(),
+        page: z.number().default(0),
+      }),
+    )
+    .query(async ({ input }) => {
+      let files: File[] = [];
+      if (input.tags.length === 0) {
+        const statement = dbqb
+          .selectFrom("File")
+          .selectAll()
+          .offset(input.page * input.limit)
+          .orderBy(sql`RAND(1234)`)
+          .limit(input.limit);
 
-            return files;
-        }),
+        files = await query(statement);
+      } else {
+        const statement = dbqb
+          .selectFrom("File")
+          .selectAll()
+          .where((qb) =>
+            qb.exists(
+              qb
+                .selectFrom("_FileToTag")
+                .selectAll()
+                .innerJoin("Tag", "_FileToTag.B", "Tag.name")
+                .whereRef("_FileToTag.A", "=", "File.id")
+                .where("Tag.name", "in", input.tags),
+            ),
+          )
+          .orderBy(sql`RAND(1234)`);
 
-    get: publicProcedure
-        .input(
-            z.object({
-                limit: z.number().int().positive(),
-                startAfter: z.string(),
-            })
-        )
-        .query(async ({ input }) => {
-            const files = await listFiles(input);
-            if (!files?.Contents) return [];
-            return files.Contents;
-        }),
+        files = await query(statement);
+      }
 
-    setLastViewed: publicProcedure
-        .input(
-            z.object({
-                startAfter: z.string(),
-            })
-        )
-        .mutation(({ input }) => {
-            return db.state.upsert({
-                create: {
-                    key: "lastKey",
-                    value: input.startAfter,
-                },
-                update: {
-                    value: input.startAfter,
-                },
-                where: {
-                    key: "lastKey",
-                },
-            });
-        }),
+      return {
+        files,
+        nextPage: input.page + 1,
+      };
+    }),
 
-    addTag: publicProcedure
-        .input(
-            z.object({
-                image: z.string(),
-                tag: z.string(),
-            })
-        )
-        .mutation(({ input }) => {
-            return db.file.upsert({
-                create: {
-                    path: input.image,
-                    tags: {
-                        connect: {
-                            name: input.tag,
-                        },
-                    },
-                },
-                update: {
-                    tags: {
-                        connect: {
-                            name: input.tag,
-                        },
-                    },
-                    updatedAt: new Date(),
-                },
-                where: {
-                    path: input.image,
-                },
-            });
-        }),
+  get: publicProcedure
+    .input(
+      z.object({
+        limit: z.number().int().positive(),
+        startAfter: z.string(),
+      }),
+    )
+    .query(async ({ input }) => {
+      const files = await listFiles(input);
+      if (!files?.Contents) return [];
+      return files.Contents;
+    }),
 
-    removeTag: publicProcedure
-        .input(
-            z.object({
-                image: z.string(),
-                tag: z.string(),
-            })
-        )
-        .mutation(({ input }) => {
-            return db.file.update({
-                data: {
-                    tags: {
-                        disconnect: {
-                            name: input.tag,
-                        },
-                    },
-                },
-                where: {
-                    path: input.image,
-                },
-            });
-        }),
+  setLastViewed: publicProcedure
+    .input(
+      z.object({
+        startAfter: z.string(),
+      }),
+    )
+    .mutation(({ input }) => {
+      return db.state.upsert({
+        create: {
+          key: "lastKey",
+          value: input.startAfter,
+        },
+        update: {
+          value: input.startAfter,
+        },
+        where: {
+          key: "lastKey",
+        },
+      });
+    }),
+
+  addTag: publicProcedure
+    .input(
+      z.object({
+        image: z.string(),
+        tag: z.string(),
+      }),
+    )
+    .mutation(({ input }) => {
+      return db.file.upsert({
+        create: {
+          path: input.image,
+          tags: {
+            connect: {
+              name: input.tag,
+            },
+          },
+        },
+        update: {
+          tags: {
+            connect: {
+              name: input.tag,
+            },
+          },
+          updatedAt: new Date(),
+        },
+        where: {
+          path: input.image,
+        },
+      });
+    }),
+
+  removeTag: publicProcedure
+    .input(
+      z.object({
+        image: z.string(),
+        tag: z.string(),
+      }),
+    )
+    .mutation(({ input }) => {
+      return db.file.update({
+        data: {
+          tags: {
+            disconnect: {
+              name: input.tag,
+            },
+          },
+        },
+        where: {
+          path: input.image,
+        },
+      });
+    }),
 });

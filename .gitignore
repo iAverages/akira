@@ -29,3 +29,5 @@ gitignore
 Thumbs.db
 
 .direnv
+
+src/generated

@@ -23,6 +23,7 @@
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "embla-carousel-solid": "^8.5.1",
+        "kysely": "^0.27.5",
         "minio": "^8.0.3",
         "postcss": "^8.4.49",
         "prisma": "^5.22.0",
@@ -36,5 +37,8 @@
     },
     "engines": {
         "node": ">=18"
+    },
+    "devDependencies": {
+        "prisma-kysely": "^1.8.0"
     }
 }

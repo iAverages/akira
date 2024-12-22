@@ -1,6 +1,6 @@
 import { As, Select } from "@kobalte/core";
-import { createQuery } from "@tanstack/solid-query";
-import { For, Show, createSignal } from "solid-js";
+import { createInfiniteQuery, createQuery } from "@tanstack/solid-query";
+import { For, Show, createMemo, createSignal } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import { Button } from "~/components/ui/button";
 import {
@@ -20,20 +20,22 @@ const CDN_URL = "http://localhost:3001/"; // import.meta.env.VITE_S3_IMAGE_PROXY
 const Index = () => {
   const [filters, setFilters] = createStore<{ tags: string[]; limit: number }>({
     tags: [],
-    limit: 10,
+    limit: 50,
   });
 
   const tags = useTags();
 
-  const files = createQuery(() => ({
+  const pageData = createInfiniteQuery(() => ({
     queryKey: ["files", "list", filters],
-    queryFn: () => {
-      return api.files.homeList.query(filters);
+    queryFn: ({ pageParam }) => {
+      return api.files.homeList.query({ ...filters, page: pageParam });
     },
     staleTime: Infinity,
+    getNextPageParam: (data) => data.nextPage,
+    initialPageParam: 0,
   }));
 
-  const tagOptions = () => tags.data?.map((tag) => tag.name) ?? [];
+  const files = createMemo(() => pageData?.data?.pages.flatMap((p) => p.files));
 
   return (
     <div class={"flex flex-col gap-6 mt-6"}>
@@ -46,7 +48,7 @@ const Index = () => {
               onChange={(val) => {
                 setFilters("limit", val as number);
               }}
-              options={[10, 20, 30, 40, 50]}
+              options={[25, 50, 100, 150, 200]}
               itemComponent={(props) => (
                 <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
               )}
@@ -61,65 +63,68 @@ const Index = () => {
           </div>
           <div class={"flex flex-col gap-1"}>
             <h3>Tags</h3>
-            <SelectRoot<string>
-              multiple
-              value={filters.tags}
-              onChange={(val) => {
-                setFilters("tags", val);
-              }}
-              options={tagOptions()}
-              placeholder="Select some tags"
-              itemComponent={(props) => (
-                <SelectItem
-                  item={props.item}
-                  class={cn({
-                    "bg-accent text-accent-foreground": filters.tags.includes(
-                      props.item.rawValue,
-                    ),
-                  })}
+            <Show when={tags.data}>
+              {(tags) => (
+                <SelectRoot<string>
+                  multiple
+                  value={filters.tags}
+                  onChange={(val) => {
+                    setFilters("tags", val);
+                  }}
+                  options={tags()}
+                  placeholder="Select some tags"
+                  itemComponent={(props) => (
+                    <SelectItem
+                      item={props.item}
+                      class={cn({
+                        "bg-accent text-accent-foreground":
+                          filters.tags.includes(props.item.rawValue),
+                      })}
+                    >
+                      <Select.ItemLabel>{props.item.rawValue}</Select.ItemLabel>
+                    </SelectItem>
+                  )}
+                  class={"w-96"}
                 >
-                  <Select.ItemLabel>{props.item.rawValue}</Select.ItemLabel>
-                </SelectItem>
+                  <SelectTrigger asChild>
+                    <As component="div">
+                      <SelectValue<string>>
+                        {(state) => (
+                          <div class={"flex gap-1"}>
+                            <For each={state.selectedOptions()}>
+                              {(option) => (
+                                <span
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  class={
+                                    "bg-neutral-800 px-2 py-1 rounded flex gap-1"
+                                  }
+                                >
+                                  {option}
+                                  <button onClick={() => state.remove(option)}>
+                                    X
+                                  </button>
+                                </span>
+                              )}
+                            </For>
+                          </div>
+                        )}
+                      </SelectValue>
+                    </As>
+                  </SelectTrigger>
+                  <Select.Portal>
+                    <SelectContent>
+                      <Select.Listbox />
+                    </SelectContent>
+                  </Select.Portal>
+                </SelectRoot>
               )}
-              class={"w-96"}
-            >
-              <SelectTrigger asChild>
-                <As component="div">
-                  <SelectValue<string>>
-                    {(state) => (
-                      <div class={"flex gap-1"}>
-                        <For each={state.selectedOptions()}>
-                          {(option) => (
-                            <span
-                              onPointerDown={(e) => e.stopPropagation()}
-                              class={
-                                "bg-neutral-800 px-2 py-1 rounded flex gap-1"
-                              }
-                            >
-                              {option}
-                              <button onClick={() => state.remove(option)}>
-                                X
-                              </button>
-                            </span>
-                          )}
-                        </For>
-                      </div>
-                    )}
-                  </SelectValue>
-                </As>
-              </SelectTrigger>
-              <Select.Portal>
-                <SelectContent>
-                  <Select.Listbox />
-                </SelectContent>
-              </Select.Portal>
-            </SelectRoot>
+            </Show>
           </div>
         </div>
       </div>
       <Separator />
       <div class={"grid grid-cols-6 gap-2 row-auto"}>
-        <Show when={files.data}>
+        <Show when={files()}>
           {(files) => (
             <For each={files()}>
               {(file) => (
@@ -131,7 +136,14 @@ const Index = () => {
           )}
         </Show>
       </div>
-      <Button onClick={() => {}}>Load More</Button>
+      <Button
+        disabled={pageData.isFetchingNextPage}
+        onClick={() => {
+          if (pageData.hasNextPage) pageData.fetchNextPage();
+        }}
+      >
+        Load More
+      </Button>
     </div>
   );
 };

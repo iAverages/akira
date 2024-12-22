@@ -7,7 +7,7 @@ use axum::routing::get;
 use axum::Router;
 use fast_image_resize::{IntoImageView, Resizer};
 use image::codecs::png::PngEncoder;
-use image::{DynamicImage, ImageEncoder};
+use image::{DynamicImage, ImageEncoder, ImageReader};
 
 #[tokio::main]
 async fn main() {
@@ -35,28 +35,15 @@ impl RemoteImage {
             .await
             .expect("failed to send http request");
 
-        let image_format = match response
-            .headers()
-            .get(header::CONTENT_TYPE)
-            .expect("url returned no CONTENT_TYPE")
-            .to_str()
-            .expect("CONTENT_TYPE header contains non visible ascii characters")
-        {
-            "image/png" => Ok(image::ImageFormat::Png),
-            "image/jpg" | "image/jpeg" => Ok(image::ImageFormat::Jpeg),
-            "image/webp" => Ok(image::ImageFormat::WebP),
-            _ => Err("format not supported"),
-        }?;
-
         let bytes = response.bytes().await.expect("failed to get image bytes");
-
         let duration = start_time.elapsed();
         println!("took(fetch): {:?}", duration);
 
         let start_time = Instant::now();
 
-        let image = image::load(BufReader::new(Cursor::new(bytes)), image_format)
-            .expect("failed to load image");
+        let image_reader =
+            ImageReader::new(BufReader::new(Cursor::new(bytes))).with_guessed_format()?;
+        let image = image_reader.decode()?;
 
         let duration = start_time.elapsed();
         println!("took(decode): {:?}", duration);
@@ -69,6 +56,7 @@ async fn root(Path(path): Path<String>) -> impl IntoResponse {
         RemoteImage::from_url(&("https://cdn.danielraybone.com/".to_owned() + &path))
             .await
             .expect("failed to send image request");
+
     let dst_width = 253;
     let dst_height = 143;
     let mut dst_image = Image::new(
@@ -113,6 +101,7 @@ async fn root(Path(path): Path<String>) -> impl IntoResponse {
         (header::CONTENT_TYPE, "image/png"),
         (header::CONTENT_DISPOSITION, "inline; filename=\"cum.png\""),
         (header::TRANSFER_ENCODING, "chunked"),
+        (header::CACHE_CONTROL, "max-age=31536000, public"),
     ]);
 
     (headers, body)
