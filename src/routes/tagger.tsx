@@ -7,6 +7,16 @@ import {
 } from "@tanstack/solid-query";
 import { For, Match, Show, Switch, createEffect, createSignal } from "solid-js";
 import { Button } from "~/components/ui/button";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxControl,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxItemIndicator,
+  ComboboxItemLabel,
+  ComboboxTrigger,
+} from "~/components/ui/combobox";
 import { Input } from "~/components/ui/input";
 import { Separator } from "~/components/ui/separator";
 import { Save } from "~/icons";
@@ -180,40 +190,114 @@ export default function Tagger() {
           </Show>
         </div>
         <div class={"flex flex-col w-1/4 items-center justify-center gap-4"}>
-          <p>Tags</p>
-          <div class={"flex gap-2"}>
-            <For each={tags.data}>
-              {(tag) => (
-                <Button
-                  class={cn({
-                    "bg-primary text-primary-foreground":
-                      selectedTags().includes(tag),
-                    "bg-primary-foreground text-primary":
-                      !selectedTags().includes(tag),
-                  })}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (selectedTags().includes(tag)) {
-                      removeTagFromImage.mutate({
-                        imageIdx: currentImageIdx(),
-                        tag,
-                      });
-                    } else {
-                      addTagToImage.mutate({
-                        imageIdx: currentImageIdx(),
-                        tag,
-                      });
-                    }
-                    setLastViewed.mutate({
-                      startAfter: files.data![currentImageIdx()].Key!,
+          <Show when={tags.data}>
+            {(tags) => (
+              <Combobox<string>
+                multiple
+                options={tags()}
+                closeOnSelection
+                value={selectedTags()}
+                allowsEmptyCollection
+                onChange={(updated) => {
+                  const currentTags = selectedTags();
+                  const newTags = updated.filter(
+                    (t) => !currentTags.includes(t),
+                  );
+                  const removedTags = currentTags.filter(
+                    (t) => !updated.includes(t),
+                  );
+
+                  newTags.forEach((t) =>
+                    addTagToImage.mutate({
+                      tag: t,
+                      imageIdx: currentImageIdx(),
+                    }),
+                  );
+
+                  removedTags.forEach((t) => {
+                    removeTagFromImage.mutate({
+                      tag: t,
+                      imageIdx: currentImageIdx(),
                     });
-                  }}
-                >
-                  {tag}
-                </Button>
-              )}
-            </For>
-          </div>
+                  });
+
+                  setLastViewed.mutate({
+                    startAfter: files.data![currentImageIdx()].Key!,
+                  });
+                }}
+                placeholder="Search tags..."
+                itemComponent={(props) => (
+                  <ComboboxItem item={props.item}>
+                    <ComboboxItemLabel>{props.item.rawValue}</ComboboxItemLabel>
+                    <ComboboxItemIndicator />
+                  </ComboboxItem>
+                )}
+              >
+                <ComboboxControl<string>>
+                  {(state) => (
+                    <>
+                      <div>
+                        <For each={state.selectedOptions()}>
+                          {(option) => (
+                            <span onPointerDown={(e) => e.stopPropagation()}>
+                              {option}
+                              <button onClick={() => state.remove(option)}>
+                                X{/* <CrossIcon /> */}
+                              </button>
+                            </span>
+                          )}
+                        </For>
+                        <ComboboxInput />
+                      </div>
+                      <button
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={state.clear}
+                      >
+                        X{/* <CrossIcon /> */}
+                      </button>
+                      <ComboboxTrigger />
+                    </>
+                  )}
+                </ComboboxControl>
+                <ComboboxContent />
+              </Combobox>
+            )}
+          </Show>
+
+          {/* <p>Tags</p> */}
+          {/* <div class={"flex gap-2"}> */}
+          {/*   <For each={tags.data}> */}
+          {/*     {(tag) => ( */}
+          {/*       <Button */}
+          {/*         class={cn({ */}
+          {/*           "bg-primary text-primary-foreground": */}
+          {/*             selectedTags().includes(tag), */}
+          {/*           "bg-primary-foreground text-primary": */}
+          {/*             !selectedTags().includes(tag), */}
+          {/*         })} */}
+          {/*         onClick={(e) => { */}
+          {/*           e.preventDefault(); */}
+          {/*           if (selectedTags().includes(tag)) { */}
+          {/*             removeTagFromImage.mutate({ */}
+          {/*               imageIdx: currentImageIdx(), */}
+          {/*               tag, */}
+          {/*             }); */}
+          {/*           } else { */}
+          {/*             addTagToImage.mutate({ */}
+          {/*               imageIdx: currentImageIdx(), */}
+          {/*               tag, */}
+          {/*             }); */}
+          {/*           } */}
+          {/*           setLastViewed.mutate({ */}
+          {/*             startAfter: files.data![currentImageIdx()].Key!, */}
+          {/*           }); */}
+          {/*         }} */}
+          {/*       > */}
+          {/*         {tag} */}
+          {/*       </Button> */}
+          {/*     )} */}
+          {/*   </For> */}
+          {/* </div> */}
           <Separator class={"w-32"} />
           <form
             onSubmit={async (e) => {
